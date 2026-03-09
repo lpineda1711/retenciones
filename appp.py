@@ -22,7 +22,7 @@ columnas = [
 "2% R.FTE","TOTAL RETENCION","valor retenido"
 ]
 
-# EXTRAER TEXTO DEL PDF
+
 def extraer_texto(pdf):
 
     texto=""
@@ -36,7 +36,6 @@ def extraer_texto(pdf):
     return texto
 
 
-# EXTRAER RUC
 def extraer_ruc(texto):
 
     ruc=re.search(r'RUC[:\s]*([0-9]{13})',texto)
@@ -52,7 +51,6 @@ def extraer_ruc(texto):
     return ""
 
 
-# BUSCAR TEXTO
 def buscar(texto,patron):
 
     m=re.search(patron,texto,re.IGNORECASE)
@@ -63,18 +61,6 @@ def buscar(texto,patron):
     return ""
 
 
-# BUSCAR NUMERO
-def buscar_num(texto,patron):
-
-    m=re.search(patron,texto,re.IGNORECASE)
-
-    if m:
-        return float(m.group(1).replace(",",""))
-
-    return 0
-
-
-# EMPRESA
 def extraer_empresa(texto):
 
     lineas=texto.split("\n")
@@ -87,34 +73,46 @@ def extraer_empresa(texto):
     return ""
 
 
-# BASES
-def obtener_bases(texto):
+def leer_tabla_retenciones(texto):
 
     base0=0
     base15=0
 
-    base0=buscar_num(texto,r"0%\s*\$?\s*([0-9\.,]+)")
-    base15=buscar_num(texto,r"(12%|15%)\s*\$?\s*([0-9\.,]+)")
+    rete10=0
+    rete2=0
+    rete100=0
 
-    return base0,base15
+    patron=r"([0-9]+\.[0-9]+)\s+(Impuesto a la Renta|IVA)\s+([0-9]+)"
+
+    matches=re.findall(patron,texto,re.IGNORECASE)
+
+    for base,impuesto,porcentaje in matches:
+
+        base=float(base)
+        porcentaje=float(porcentaje)
+
+        if "RENTA" in impuesto.upper():
+
+            base0+=base
+
+        if "IVA" in impuesto.upper():
+
+            base15+=base
+
+        valor_retencion=round(base*(porcentaje/100),2)
+
+        if porcentaje==10:
+            rete10+=valor_retencion
+
+        elif porcentaje==2:
+            rete2+=valor_retencion
+
+        elif porcentaje==100:
+            rete100+=valor_retencion
+
+    return base0,base15,rete10,rete2,rete100
 
 
-# PORCENTAJE RETENCION
-def obtener_porcentaje_retencion(texto):
-
-    if re.search(r"10\s*%",texto):
-        return 10
-
-    if re.search(r"2\s*%",texto):
-        return 2
-
-    if re.search(r"100\s*%",texto):
-        return 100
-
-    return 0
-
-
-# PROCESAR PDF
 def procesar_pdf(pdf):
 
     texto=extraer_texto(pdf)
@@ -132,35 +130,17 @@ def procesar_pdf(pdf):
 
     autorizacion=buscar(texto,r"Autorizaci[oó]n[:\s]*([0-9]{10,})")
 
-    iva=buscar_num(texto,r"IVA\s*\$?\s*([0-9\.,]+)")
+    base0,base15,rete10,rete2,rete100=leer_tabla_retenciones(texto)
 
-    propina=buscar_num(texto,r"PROPINA\s*\$?\s*([0-9\.,]+)")
+    propina=0
+    iva=0
 
-    base0,base15=obtener_bases(texto)
-
-    # SI HAY IVA LA BASE ES 15%
-    if iva>0 and base15==0:
-        base15=buscar_num(texto,r"SUBTOTAL\s*\$?\s*([0-9\.,]+)")
+    if base15>0:
+        iva=round(base15*0.15,2)
 
     total=base0+base15+propina+iva
 
-    porcentaje=obtener_porcentaje_retencion(texto)
-
-    rete10=0
-    rete2=0
-    rete100=0
-    rete0=0
-
-    if porcentaje==10:
-        rete10=round(total*0.10,2)
-
-    if porcentaje==2:
-        rete2=round(total*0.02,2)
-
-    if porcentaje==100:
-        rete100=round(iva*1,2)
-
-    total_retencion=rete10+rete2+rete100+rete0
+    total_retencion=rete10+rete2+rete100
 
     fila={
         "FECHA":fecha,
@@ -177,7 +157,7 @@ def procesar_pdf(pdf):
         "IVA":iva,
         "TOTAL":total,
         "N° RETENCION":"",
-        "0% R.FTE":rete0,
+        "0% R.FTE":"",
         "RETE 10%":rete10,
         "RETE 100%":rete100,
         "2% R.FTE":rete2,
