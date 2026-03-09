@@ -100,7 +100,8 @@ def leer_tabla_retencion(pdf):
 
                     numeros=re.findall(r"\d+\.\d+",texto)
 
-                    porc=re.search(r"(10|2|100)",texto)
+                    # detectar porcentaje correctamente
+                    porc=re.search(r"\b(1|2|8|10|20|30|70|100)\b",texto)
 
                     if numeros:
 
@@ -122,10 +123,10 @@ def leer_tabla_retencion(pdf):
                         if porcentaje==10:
                             rete10=valor
 
-                        if porcentaje==2:
+                        elif porcentaje==2:
                             rete2=valor
 
-                        if porcentaje==100:
+                        elif porcentaje==100:
                             rete100=valor
 
     return base0,base15,rete10,rete2,rete100,valor_retenido
@@ -225,6 +226,8 @@ if uploaded_files:
 
             fila_excel+=1
 
+            inicio_datos=fila_excel
+
             for i,row in datos_mes.iterrows():
 
                 for col,col_name in enumerate(columnas):
@@ -232,13 +235,17 @@ if uploaded_files:
 
                 fila_excel+=1
 
+            # FILA TOTAL AMARILLA COMPLETA
+            for col in range(len(columnas)):
+                worksheet.write(fila_excel,col,"",total_format)
+
             worksheet.write(fila_excel,0,"TOTAL",total_format)
 
             for col in range(8,20):
 
                 letra=chr(65+col)
 
-                formula=f"=SUM({letra}{fila_excel-len(datos_mes)}:{letra}{fila_excel})"
+                formula=f"=SUM({letra}{inicio_datos+1}:{letra}{fila_excel})"
 
                 worksheet.write_formula(fila_excel,col,formula,total_format)
 
