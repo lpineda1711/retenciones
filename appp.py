@@ -1,79 +1,38 @@
-import os
+import streamlit as st
 import pdfplumber
-from openpyxl import Workbook
-from openpyxl.styles import PatternFill
+import pandas as pd
+from io import BytesIO
 
-# carpeta de PDFs
-carpeta_pdfs = "pdfs"
+st.title("Generador de Retenciones")
 
-# crear carpeta si no existe
-if not os.path.isdir(carpeta_pdfs):
-    os.makedirs(carpeta_pdfs)
+st.write("Sube tus PDFs de retenciones")
 
-archivo_excel = "retenciones.xlsx"
+archivos = st.file_uploader(
+    "Subir PDFs",
+    type="pdf",
+    accept_multiple_files=True
+)
 
-# encabezados
-encabezados = [
-    "MES",
-    "BASE 0%",
-    "BASE 15%",
-    "PROPINA",
-    "IVA",
-    "TOTAL",
-    "RETE 1%",
-    "RETE 2%",
-    "RETE 10%",
-    "RETE 100%",
-    "TOTAL RETENIDO"
-]
+datos = []
 
-# meses
-meses = [
-    "ENERO","FEBRERO","MARZO","ABRIL","MAYO","JUNIO",
-    "JULIO","AGOSTO","SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE"
-]
+if archivos:
 
-# color amarillo
-amarillo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    for archivo in archivos:
 
-wb = Workbook()
-ws = wb.active
-ws.title = "RETENCIONES"
+        texto = ""
 
-fila_excel = 1
+        with pdfplumber.open(archivo) as pdf:
+            for pagina in pdf.pages:
+                t = pagina.extract_text()
+                if t:
+                    texto += t + "\n"
 
-for mes in meses:
-
-    # fila del mes
-    ws.cell(row=fila_excel, column=1, value=mes)
-
-    for c in range(1, len(encabezados)+1):
-        ws.cell(row=fila_excel, column=c).fill = amarillo
-
-    fila_excel += 1
-
-    # encabezados
-    for c, titulo in enumerate(encabezados, 1):
-        ws.cell(row=fila_excel, column=c, value=titulo)
-        ws.cell(row=fila_excel, column=c).fill = amarillo
-
-    fila_excel += 1
-
-    fila_inicio_datos = fila_excel
-
-    # recorrer PDFs
-    for archivo in os.listdir(carpeta_pdfs):
-
-        if not archivo.lower().endswith(".pdf"):
-            continue
-
-        ruta_pdf = os.path.join(carpeta_pdfs, archivo)
+        lineas = texto.split("\n")
 
         base0 = ""
         base15 = ""
-        propina = ""
-        iva = ""
-        total = ""
+        iva = 0
+        propina = 0
 
         rete1 = ""
         rete2 = ""
@@ -83,16 +42,6 @@ for mes in meses:
         base_imponible = None
         porcentaje = None
         impuesto_tipo = ""
-
-        texto = ""
-
-        with pdfplumber.open(ruta_pdf) as pdf:
-            for pagina in pdf.pages:
-                t = pagina.extract_text()
-                if t:
-                    texto += t + "\n"
-
-        lineas = texto.split("\n")
 
         for l in lineas:
 
@@ -111,32 +60,29 @@ for mes in meses:
             if "Impuesto" in l:
                 impuesto_tipo = l.lower()
 
-            if "IVA" in l and iva == "":
+            if "IVA" in l and iva == 0:
                 try:
                     iva = float(l.split()[-1])
                 except:
                     pass
 
-        # decidir base
-        if base_imponible is not None:
+        if base_imponible:
 
             if "iva" in impuesto_tipo:
                 base15 = base_imponible
             else:
                 base0 = base_imponible
 
-        # calcular total
         total = (
             (base0 if isinstance(base0,float) else 0) +
             (base15 if isinstance(base15,float) else 0) +
-            (propina if isinstance(propina,float) else 0) +
-            (iva if isinstance(iva,float) else 0)
+            iva +
+            propina
         )
 
-        # calcular retención
-        if porcentaje is not None and base_imponible is not None:
+        if porcentaje and base_imponible:
 
-            valor_retenido = round(base_imponible * porcentaje / 100, 2)
+            valor_retenido = round(base_imponible * porcentaje / 100,2)
 
             if porcentaje == 1:
                 rete1 = valor_retenido
@@ -157,39 +103,31 @@ for mes in meses:
             (rete100 if isinstance(rete100,float) else 0)
         )
 
-        datos = [
-            mes,
-            base0,
-            base15,
-            propina,
-            iva,
-            total,
-            rete1,
-            rete2,
-            rete10,
-            rete100,
-            total_retenido
-        ]
+        datos.append({
+            "BASE 0%": base0,
+            "BASE 15%": base15,
+            "PROPINA": propina,
+            "IVA": iva,
+            "TOTAL": total,
+            "RETE 1%": rete1,
+            "RETE 2%": rete2,
+            "RETE 10%": rete10,
+            "RETE 100%": rete100,
+            "TOTAL RETENIDO": total_retenido
+        })
 
-        for c, valor in enumerate(datos, 1):
-            ws.cell(row=fila_excel, column=c, value=valor)
+    df = pd.DataFrame(datos)
 
-        fila_excel += 1
+    st.dataframe(df)
 
-    # fila sumatoria
-    fila_suma = fila_excel
+    buffer = BytesIO()
 
-    for c in range(2, len(encabezados)+1):
+    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False)
 
-        letra = ws.cell(row=1, column=c).column_letter
-
-        formula = f"=SUM({letra}{fila_inicio_datos}:{letra}{fila_excel-1})"
-
-        ws.cell(row=fila_suma, column=c, value=formula)
-        ws.cell(row=fila_suma, column=c).fill = amarillo
-
-    fila_excel += 2
-
-wb.save(archivo_excel)
-
-print("Archivo Excel creado correctamente")
+    st.download_button(
+        label="Descargar Excel",
+        data=buffer.getvalue(),
+        file_name="retenciones.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
