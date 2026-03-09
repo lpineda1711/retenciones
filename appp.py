@@ -193,6 +193,8 @@ if uploaded_files:
 
     df=pd.DataFrame(datos,columns=columnas)
 
+    df["FECHA"]=pd.to_datetime(df["FECHA"],errors="coerce")
+
     st.dataframe(df)
 
     output=BytesIO()
@@ -233,6 +235,25 @@ if uploaded_files:
             worksheet.write_formula(filas,i,formula,total_format)
 
         worksheet.set_column(0,20,18)
+
+        # --------- NUEVO: TABLAS POR MES ---------
+
+        fila_inicio=filas+4
+
+        meses=df.groupby(df["FECHA"].dt.to_period("M"))
+
+        for mes,datos_mes in meses:
+
+            worksheet.write(fila_inicio,0,f"MES {mes}",header_format)
+
+            datos_mes.to_excel(
+                writer,
+                sheet_name="RETENCIONES",
+                startrow=fila_inicio+1,
+                index=False
+            )
+
+            fila_inicio+=len(datos_mes)+5
 
     output.seek(0)
 
