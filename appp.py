@@ -1,155 +1,159 @@
 import os
-import re
 import pdfplumber
+import streamlit as st
 import pandas as pd
 from datetime import datetime
-from openpyxl import Workbook
-from openpyxl.styles import PatternFill
+from collections import defaultdict
+
+st.title("Procesador de Retenciones")
 
 carpeta_pdfs = "pdfs"
-archivo_excel = "retenciones.xlsx"
 
-datos_por_mes = {}
+def extraer_datos(pdf_path):
+    datos = {
+        "fecha": "",
+        "base0": 0,
+        "base15": 0,
+        "propina": 0,
+        "iva": 0,
+        "porcentaje": 0,
+        "base_retencion": 0
+    }
 
-def extraer_valor(texto, patron):
-    match = re.search(patron, texto)
-    return match.group(1) if match else ""
-
-for archivo in os.listdir(carpeta_pdfs):
-
-    if not archivo.endswith(".pdf"):
-        continue
-
-    ruta = os.path.join(carpeta_pdfs, archivo)
-
-    with pdfplumber.open(ruta) as pdf:
+    with pdfplumber.open(pdf_path) as pdf:
         texto = ""
-        for pagina in pdf.pages:
-            texto += pagina.extract_text() + "\n"
+        for page in pdf.pages:
+            texto += page.extract_text()
 
-    fecha = extraer_valor(texto, r"Fecha de Emisión\s*([\d/:-]+)")
-    base_ret = extraer_valor(texto, r"Base Imponible para la Retención\s*([\d.]+)")
-    porcentaje = extraer_valor(texto, r"Porcentaje Retención\s*([\d.]+)")
-    impuesto = extraer_valor(texto, r"Impuesto\s*([A-Za-z ]+)")
+    lineas = texto.split("\n")
 
-    base_ret = float(base_ret) if base_ret else 0
-    porcentaje = float(porcentaje) if porcentaje else 0
+    for l in lineas:
 
-    try:
-        fecha_obj = datetime.strptime(fecha.split()[0], "%d/%m/%Y")
-        fecha = fecha_obj.strftime("%Y-%m-%d")
-        mes = fecha_obj.strftime("%B").upper()
-    except:
-        mes = "SIN_MES"
+        if "Fecha de Emisión" in l:
+            try:
+                fecha = l.split()[-1]
+                datos["fecha"] = datetime.strptime(fecha,"%d/%m/%Y").date()
+            except:
+                pass
 
-    base0 = 0
-    base15 = 0
+        if "Base Imponible para la Retención" in l:
+            try:
+                datos["base_retencion"] = float(l.split()[-1])
+            except:
+                pass
 
-    if "RENTA" in impuesto.upper():
-        base0 = base_ret
-    elif "IVA" in impuesto.upper():
-        base15 = base_ret
+        if "Porcentaje Retención" in l:
+            try:
+                datos["porcentaje"] = float(l.split()[-1])
+            except:
+                datos["porcentaje"] = 0
 
-    propina = 0
-    iva = base15 * 0.15
+        if "IVA" in l:
+            try:
+                datos["iva"] = float(l.split()[-1])
+            except:
+                pass
 
-    if mes not in datos_por_mes:
-        datos_por_mes[mes] = []
+    if datos["iva"] > 0:
+        datos["base15"] = datos["base_retencion"]
+    else:
+        datos["base0"] = datos["base_retencion"]
 
-    datos_por_mes[mes].append({
-        "fecha": fecha,
-        "base0": base0,
-        "base15": base15,
-        "propina": propina,
-        "iva": iva,
-        "base_ret": base_ret,
-        "porcentaje": porcentaje
-    })
+    return datos
 
-wb = Workbook()
-ws = wb.active
-ws.title = "RETENCIONES"
 
-amarillo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+datos_por_mes = defaultdict(list)
 
-fila = 1
+if os.path.exists(carpeta_pdfs):
+
+    for archivo in os.listdir(carpeta_pdfs):
+
+        if archivo.endswith(".pdf"):
+
+            ruta = os.path.join(carpeta_pdfs, archivo)
+
+            datos = extraer_datos(ruta)
+
+            if datos["fecha"] != "":
+                mes = datos["fecha"].strftime("%B")
+                datos_por_mes[mes].append(datos)
+
+else:
+    st.error("La carpeta 'pdfs' no existe")
+
+
+columnas = [
+"FECHA","BASE 0%","BASE 15%","PROPINA","IVA","TOTAL",
+"RETE 100%","RETE 10%","RETE 2%","TOTAL RETENCION"
+]
 
 for mes, registros in datos_por_mes.items():
 
-    ws.cell(row=fila, column=1, value=mes)
-    ws.cell(row=fila, column=1).fill = amarillo
-    fila += 1
+    st.markdown(f"### 🟨 {mes.upper()}")
 
-    titulos = [
-        "FECHA",
-        "BASE 0%",
-        "BASE 15%",
-        "PROPINA",
-        "IVA",
-        "TOTAL",
-        "RETE 2%",
-        "RETE 10%",
-        "RETE 100%",
-        "TOTAL RETENCION"
-    ]
-
-    for col, titulo in enumerate(titulos, 1):
-        celda = ws.cell(row=fila, column=col, value=titulo)
-        celda.fill = amarillo
-
-    fila += 1
-    inicio_tabla = fila
+    filas = []
 
     for r in registros:
 
-        ws.cell(row=fila, column=1, value=r["fecha"])
-        ws.cell(row=fila, column=2, value=r["base0"])
-        ws.cell(row=fila, column=3, value=r["base15"])
-        ws.cell(row=fila, column=4, value=r["propina"])
-        ws.cell(row=fila, column=5, value=r["iva"])
+        base0 = r["base0"]
+        base15 = r["base15"]
+        propina = r["propina"]
+        iva = r["iva"]
 
-        ws.cell(row=fila, column=6,
-            value=f"=SUM(B{fila}:E{fila})")
-
-        base_ret = r["base_ret"]
         porcentaje = r["porcentaje"]
+        base_ret = r["base_retencion"]
 
-        rete2 = 0
-        rete10 = 0
         rete100 = 0
+        rete10 = 0
+        rete2 = 0
 
-        if porcentaje == 2:
-            rete2 = base_ret * 0.02
+        if porcentaje == 100:
+            rete100 = base_ret * 1
 
         elif porcentaje == 10:
             rete10 = base_ret * 0.10
 
-        elif porcentaje == 100:
-            rete100 = base_ret * 1
+        elif porcentaje == 2:
+            rete2 = base_ret * 0.02
 
-        ws.cell(row=fila, column=7, value=rete2)
-        ws.cell(row=fila, column=8, value=rete10)
-        ws.cell(row=fila, column=9, value=rete100)
+        else:
+            rete100 = 0
+            rete10 = 0
+            rete2 = 0
 
-        ws.cell(row=fila, column=10,
-            value=f"=SUM(G{fila}:I{fila})")
+        total_ret = rete100 + rete10 + rete2
 
-        fila += 1
+        filas.append([
+            r["fecha"],
+            base0,
+            base15,
+            propina,
+            iva,
+            "", 
+            rete100,
+            rete10,
+            rete2,
+            total_ret
+        ])
 
-    fila_suma = fila
+    df = pd.DataFrame(filas, columns=columnas)
 
-    ws.cell(row=fila_suma, column=1, value="TOTAL")
+    for i in range(len(df)):
+        df.loc[i,"TOTAL"] = f"=SUMA(B{i+2}:E{i+2})"
 
-    for col in range(2, 11):
-        letra = chr(64 + col)
-        ws.cell(row=fila_suma, column=col,
-            value=f"=SUM({letra}{inicio_tabla}:{letra}{fila_suma-1})")
+    fila_final = [
+        "TOTAL",
+        "=SUMA(B2:B100)",
+        "=SUMA(C2:C100)",
+        "=SUMA(D2:D100)",
+        "=SUMA(E2:E100)",
+        "=SUMA(F2:F100)",
+        "=SUMA(G2:G100)",
+        "=SUMA(H2:H100)",
+        "=SUMA(I2:I100)",
+        "=SUMA(J2:J100)"
+    ]
 
-    for col in range(1, 11):
-        ws.cell(row=fila_suma, column=col).fill = amarillo
+    df.loc[len(df)] = fila_final
 
-    fila += 3
-
-wb.save(archivo_excel)
-
-print("Excel generado correctamente")
+    st.dataframe(df)
