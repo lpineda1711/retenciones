@@ -77,6 +77,7 @@ def leer_tabla_retencion(pdf):
 
     base0=""
     base15=""
+
     rete10=""
     rete2=""
     rete100=""
@@ -95,36 +96,36 @@ def leer_tabla_retencion(pdf):
                     if not fila:
                         continue
 
-                    fila_texto=" ".join([str(x) for x in fila if x])
+                    texto=" ".join([str(x) for x in fila if x])
 
-                    numeros=re.findall(r"\d+\.\d+",fila_texto)
+                    numeros=re.findall(r"\d+\.\d+",texto)
 
-                    porcentaje=re.search(r"(10|2|100)\.?\d*",fila_texto)
+                    porc=re.search(r"(10|2|100)",texto)
 
                     if numeros:
 
                         base=float(numeros[0])
 
-                        if "RENTA" in fila_texto.upper():
+                        if "RENTA" in texto.upper():
                             base0=base
 
-                        if "IVA" in fila_texto.upper():
-                            if base>0:
-                                base15=base
+                        if "IVA" in texto.upper() and base>0:
+                            base15=base
 
-                    if porcentaje and len(numeros)>=2:
+                    if porc and len(numeros)>=2:
 
-                        porc=int(float(porcentaje.group()))
+                        porcentaje=int(porc.group())
                         valor=float(numeros[-1])
+
                         valor_retenido=valor
 
-                        if porc==10:
+                        if porcentaje==10:
                             rete10=valor
 
-                        elif porc==2:
+                        if porcentaje==2:
                             rete2=valor
 
-                        elif porc==100:
+                        if porcentaje==100:
                             rete100=valor
 
     return base0,base15,rete10,rete2,rete100,valor_retenido
@@ -149,10 +150,6 @@ def procesar_pdf(pdf):
 
     base0,base15,rete10,rete2,rete100,valor_retenido=leer_tabla_retencion(pdf)
 
-    propina=""
-    iva=""
-    total=""
-
     fila={
         "FECHA":fecha,
         "IFIS":empresa,
@@ -164,9 +161,9 @@ def procesar_pdf(pdf):
         "EXCENTO IVA":"",
         "BASE 0%":base0,
         "BASE 15%":base15,
-        "PROPINA":propina,
-        "IVA":iva,
-        "TOTAL":total,
+        "PROPINA":"",
+        "IVA":"",
+        "TOTAL":"",
         "N° RETENCION":"",
         "0% R.FTE":"",
         "RETE 10%":rete10,
@@ -196,10 +193,9 @@ if uploaded_files:
 
     with pd.ExcelWriter(output,engine="xlsxwriter") as writer:
 
-        df.to_excel(writer,index=False,sheet_name="RETENCIONES")
-
         workbook=writer.book
-        worksheet=writer.sheets["RETENCIONES"]
+        worksheet=workbook.add_worksheet("RETENCIONES")
+        writer.sheets["RETENCIONES"]=worksheet
 
         header_format=workbook.add_format({
             "bold":True,
@@ -208,45 +204,47 @@ if uploaded_files:
             "bg_color":"#FFFF00"
         })
 
-        for col,col_name in enumerate(columnas):
-            worksheet.write(0,col,col_name,header_format)
-
-        filas=len(df)+1
-
         total_format=workbook.add_format({
             "bold":True,
             "border":1,
             "bg_color":"#FFFF00"
         })
 
-        worksheet.write(filas,0,"TOTAL",total_format)
-
-        for i in range(8,20):
-
-            letra=chr(65+i)
-
-            formula=f"=SUM({letra}2:{letra}{filas})"
-
-            worksheet.write_formula(filas,i,formula,total_format)
-
-        worksheet.set_column(0,20,18)
-
-        fila_inicio=filas+4
+        fila_excel=0
 
         meses=df.groupby(df["FECHA"].dt.to_period("M"))
 
         for mes,datos_mes in meses:
 
-            worksheet.write(fila_inicio,0,f"MES {mes}",header_format)
+            worksheet.write(fila_excel,0,f"MES {mes}",header_format)
 
-            datos_mes.to_excel(
-                writer,
-                sheet_name="RETENCIONES",
-                startrow=fila_inicio+1,
-                index=False
-            )
+            fila_excel+=1
 
-            fila_inicio+=len(datos_mes)+5
+            for col,col_name in enumerate(columnas):
+                worksheet.write(fila_excel,col,col_name,header_format)
+
+            fila_excel+=1
+
+            for i,row in datos_mes.iterrows():
+
+                for col,col_name in enumerate(columnas):
+                    worksheet.write(fila_excel,col,row[col_name])
+
+                fila_excel+=1
+
+            worksheet.write(fila_excel,0,"TOTAL",total_format)
+
+            for col in range(8,20):
+
+                letra=chr(65+col)
+
+                formula=f"=SUM({letra}{fila_excel-len(datos_mes)}:{letra}{fila_excel})"
+
+                worksheet.write_formula(fila_excel,col,formula,total_format)
+
+            fila_excel+=3
+
+        worksheet.set_column(0,20,18)
 
     output.seek(0)
 
