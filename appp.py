@@ -73,14 +73,11 @@ def extraer_empresa(texto):
     return ""
 
 
-def leer_tabla_retenciones(pdf):
+def leer_retencion(pdf):
 
     base0=0
     base15=0
-
-    rete10=0
-    rete2=0
-    rete100=0
+    porcentaje=0
 
     with pdfplumber.open(pdf) as pdf_file:
 
@@ -95,45 +92,28 @@ def leer_tabla_retenciones(pdf):
                     if not fila:
                         continue
 
-                    fila_texto=" ".join([str(x) for x in fila if x])
+                    texto=" ".join([str(x) for x in fila if x])
 
-                    # buscar base
-                    base_match=re.search(r"\d+\.\d+",fila_texto)
+                    base_match=re.search(r"\d+\.\d+",texto)
 
                     if base_match:
 
                         base=float(base_match.group())
 
-                        if "RENTA" in fila_texto.upper():
+                        if "RENTA" in texto.upper():
 
                             base0+=base
 
-                        if "IVA" in fila_texto.upper():
+                        if "IVA" in texto.upper():
 
                             base15+=base
 
-                        porc_match=re.search(r"\d+\.\d+|\d+",fila_texto)
+                        porc=re.search(r"\b(10|2|100)\b",texto)
 
-                        if "%" in fila_texto or porc_match:
+                        if porc:
+                            porcentaje=int(porc.group())
 
-                            porcentaje_match=re.search(r"\d{1,3}",fila_texto)
-
-                            if porcentaje_match:
-
-                                porcentaje=int(porcentaje_match.group())
-
-                                valor=round(base*(porcentaje/100),2)
-
-                                if porcentaje==10:
-                                    rete10+=valor
-
-                                elif porcentaje==2:
-                                    rete2+=valor
-
-                                elif porcentaje==100:
-                                    rete100+=valor
-
-    return base0,base15,rete10,rete2,rete100
+    return base0,base15,porcentaje
 
 
 def procesar_pdf(pdf):
@@ -153,7 +133,7 @@ def procesar_pdf(pdf):
 
     autorizacion=buscar(texto,r"Autorizaci[oó]n[:\s]*([0-9]{10,})")
 
-    base0,base15,rete10,rete2,rete100=leer_tabla_retenciones(pdf)
+    base0,base15,porcentaje=leer_retencion(pdf)
 
     propina=0
     iva=0
@@ -162,6 +142,19 @@ def procesar_pdf(pdf):
         iva=round(base15*0.15,2)
 
     total=base0+base15+propina+iva
+
+    rete10=0
+    rete2=0
+    rete100=0
+
+    if porcentaje==10:
+        rete10=round(total*0.10,2)
+
+    if porcentaje==2:
+        rete2=round(total*0.02,2)
+
+    if porcentaje==100:
+        rete100=round(iva*1,2)
 
     total_retencion=rete10+rete2+rete100
 
@@ -207,6 +200,39 @@ if uploaded_files:
     with pd.ExcelWriter(output,engine="xlsxwriter") as writer:
 
         df.to_excel(writer,index=False,sheet_name="RETENCIONES")
+
+        workbook=writer.book
+        worksheet=writer.sheets["RETENCIONES"]
+
+        header_format=workbook.add_format({
+            "bold":True,
+            "align":"center",
+            "border":1,
+            "bg_color":"#FFFF00"
+        })
+
+        for col,col_name in enumerate(columnas):
+            worksheet.write(0,col,col_name,header_format)
+
+        filas=len(df)+1
+
+        total_format=workbook.add_format({
+            "bold":True,
+            "border":1,
+            "bg_color":"#FFFF00"
+        })
+
+        worksheet.write(filas,0,"TOTAL",total_format)
+
+        for i in range(8,20):
+
+            letra=chr(65+i)
+
+            formula=f"=SUM({letra}2:{letra}{filas})"
+
+            worksheet.write_formula(filas,i,formula,total_format)
+
+        worksheet.set_column(0,20,18)
 
     output.seek(0)
 
