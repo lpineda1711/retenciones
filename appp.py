@@ -95,46 +95,36 @@ def leer_tabla_retencion(pdf):
                     if not fila:
                         continue
 
-                    texto=" ".join([str(x) for x in fila if x])
+                    fila_texto=" ".join([str(x) for x in fila if x])
 
-                    base_match=re.search(r"\d+\.\d+",texto)
+                    numeros=re.findall(r"\d+\.\d+",fila_texto)
 
-                    porc_match=re.search(r"(10|2|100)\.?\d*",texto)
+                    porcentaje=re.search(r"(10|2|100)\.?\d*",fila_texto)
 
-                    valor_match=re.findall(r"\d+\.\d+",texto)
+                    if numeros:
 
-                    if base_match:
+                        base=float(numeros[0])
 
-                        base=float(base_match.group())
-
-                        if "RENTA" in texto.upper():
-
+                        if "RENTA" in fila_texto.upper():
                             base0=base
 
-                        if "IVA" in texto.upper():
-
+                        if "IVA" in fila_texto.upper():
                             if base>0:
                                 base15=base
-                            else:
-                                base15=""
 
-                    if porc_match:
+                    if porcentaje and len(numeros)>=2:
 
-                        porcentaje=int(float(porc_match.group()))
+                        porc=int(float(porcentaje.group()))
+                        valor=float(numeros[-1])
+                        valor_retenido=valor
 
-                        if len(valor_match)>=2:
-                            valor=float(valor_match[-1])
-                            valor_retenido=valor
-                        else:
-                            valor=""
-
-                        if porcentaje==10:
+                        if porc==10:
                             rete10=valor
 
-                        elif porcentaje==2:
+                        elif porc==2:
                             rete2=valor
 
-                        elif porcentaje==100:
+                        elif porc==100:
                             rete100=valor
 
     return base0,base15,rete10,rete2,rete100,valor_retenido
@@ -161,10 +151,7 @@ def procesar_pdf(pdf):
 
     propina=""
     iva=""
-
     total=""
-
-    total_retencion=valor_retenido
 
     fila={
         "FECHA":fecha,
@@ -243,8 +230,6 @@ if uploaded_files:
             worksheet.write_formula(filas,i,formula,total_format)
 
         worksheet.set_column(0,20,18)
-
-        # TABLAS POR MES
 
         fila_inicio=filas+4
 
