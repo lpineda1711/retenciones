@@ -1,10 +1,15 @@
 import pdfplumber
-import pandas as pd
+import os
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill
-import os
 
+# carpeta donde están los pdf
 carpeta_pdfs = "pdfs"
+
+# crear carpeta si no existe
+if not os.path.exists(carpeta_pdfs):
+    os.makedirs(carpeta_pdfs)
+
 archivo_excel = "retenciones.xlsx"
 
 encabezados = [
@@ -26,119 +31,114 @@ meses = [
     "JULIO","AGOSTO","SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE"
 ]
 
-fill_amarillo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+amarillo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 
 wb = Workbook()
 ws = wb.active
 ws.title = "RETENCIONES"
 
-fila_excel = 1
+fila = 1
 
 for mes in meses:
 
-    ws.cell(row=fila_excel, column=1, value=mes)
+    # fila del mes
+    ws.cell(row=fila, column=1, value=mes)
+    for c in range(1, len(encabezados)+1):
+        ws.cell(row=fila, column=c).fill = amarillo
+    fila += 1
 
-    for col in range(1,len(encabezados)+1):
-        ws.cell(row=fila_excel,column=col).fill = fill_amarillo
+    # encabezados
+    for c,enc in enumerate(encabezados,1):
+        ws.cell(row=fila, column=c, value=enc)
+        ws.cell(row=fila, column=c).fill = amarillo
+    fila += 1
 
-    fila_excel += 1
-
-    for col,enc in enumerate(encabezados,1):
-        ws.cell(row=fila_excel,column=col,value=enc)
-        ws.cell(row=fila_excel,column=col).fill = fill_amarillo
-
-    fila_excel += 1
-
+    # leer pdfs
     for archivo in os.listdir(carpeta_pdfs):
 
         if not archivo.lower().endswith(".pdf"):
             continue
 
-        ruta = os.path.join(carpeta_pdfs,archivo)
+        ruta = os.path.join(carpeta_pdfs, archivo)
 
-        base0 = ""
-        base15 = ""
-        propina = 0
-        iva = 0
-        total = 0
+        base0=""
+        base15=""
+        propina=0
+        iva=0
+        total=0
 
         rete1=""
         rete2=""
         rete10=""
         rete100=""
 
-        porcentaje = None
-        base_imponible = None
-        impuesto_tipo = ""
+        base_imponible=None
+        porcentaje=None
+        impuesto=""
 
         with pdfplumber.open(ruta) as pdf:
-            texto = ""
+            texto=""
             for pagina in pdf.pages:
-                texto += pagina.extract_text()
+                texto+=pagina.extract_text()
 
-        lineas = texto.split("\n")
+        lineas=texto.split("\n")
 
         for l in lineas:
 
             if "Base Imponible para la Retención" in l:
                 try:
-                    base_imponible = float(l.split()[-1])
+                    base_imponible=float(l.split()[-1])
+                except:
+                    pass
+
+            if "Porcentaje Retención" in l:
+                try:
+                    porcentaje=float(l.split()[-1])
                 except:
                     pass
 
             if "Impuesto" in l:
-                impuesto_tipo = l.lower()
+                impuesto=l.lower()
 
-            if "Porcentaje Retención" in l:
+            if "IVA" in l and iva==0:
                 try:
-                    porcentaje = float(l.split()[-1])
+                    iva=float(l.split()[-1])
                 except:
                     pass
 
-            if "IVA" in l and iva == 0:
-                try:
-                    iva = float(l.split()[-1])
-                except:
-                    pass
+        if base_imponible:
 
-        if base_imponible != None:
-
-            if "iva" in impuesto_tipo:
-                base15 = base_imponible
-                base0 = ""
+            if "iva" in impuesto:
+                base15=base_imponible
             else:
-                base0 = base_imponible
-                base15 = ""
+                base0=base_imponible
 
-        if isinstance(base0,float) or isinstance(base15,float):
-            total = (base0 if base0!="" else 0) + (base15 if base15!="" else 0) + propina + iva
+        total=(base0 if base0!="" else 0)+(base15 if base15!="" else 0)+propina+iva
 
-        valor_retenido = ""
+        if porcentaje and base_imponible:
 
-        if porcentaje != None and base_imponible != None:
+            valor=round(base_imponible*porcentaje/100,2)
 
-            valor_retenido = round(base_imponible * porcentaje / 100 ,2)
+            if porcentaje==1:
+                rete1=valor
 
-            if porcentaje == 1:
-                rete1 = valor_retenido
+            elif porcentaje==2:
+                rete2=valor
 
-            elif porcentaje == 2:
-                rete2 = valor_retenido
+            elif porcentaje==10:
+                rete10=valor
 
-            elif porcentaje == 10:
-                rete10 = valor_retenido
+            elif porcentaje==100:
+                rete100=valor
 
-            elif porcentaje == 100:
-                rete100 = valor_retenido
-
-        total_retenido = sum([
+        total_retenido=sum([
             rete1 if isinstance(rete1,float) else 0,
             rete2 if isinstance(rete2,float) else 0,
             rete10 if isinstance(rete10,float) else 0,
             rete100 if isinstance(rete100,float) else 0
         ])
 
-        datos = [
+        datos=[
             mes,
             base0,
             base15,
@@ -152,23 +152,24 @@ for mes in meses:
             total_retenido
         ]
 
-        for col,val in enumerate(datos,1):
-            ws.cell(row=fila_excel,column=col,value=val)
+        for c,v in enumerate(datos,1):
+            ws.cell(row=fila,column=c,value=v)
 
-        fila_excel += 1
+        fila+=1
 
-    fila_sumas = fila_excel
+    # fila de sumatoria
+    fila_suma=fila
 
-    for col in range(2,len(encabezados)+1):
+    for c in range(2,len(encabezados)+1):
 
-        letra = ws.cell(row=1,column=col).column_letter
+        letra=ws.cell(row=1,column=c).column_letter
 
-        ws.cell(row=fila_sumas,column=col,
-        value=f"=SUM({letra}{fila_excel-10}:{letra}{fila_excel-1})")
+        ws.cell(row=fila_suma,column=c,
+        value=f"=SUM({letra}3:{letra}{fila-1})")
 
-        ws.cell(row=fila_sumas,column=col).fill = fill_amarillo
+        ws.cell(row=fila_suma,column=c).fill=amarillo
 
-    fila_excel += 2
+    fila+=2
 
 wb.save(archivo_excel)
 
