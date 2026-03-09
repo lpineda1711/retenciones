@@ -73,11 +73,14 @@ def extraer_empresa(texto):
     return ""
 
 
-def leer_retencion(pdf):
+def leer_tabla_retencion(pdf):
 
-    base0=0
-    base15=0
-    porcentaje=0
+    base0=""
+    base15=""
+    rete10=""
+    rete2=""
+    rete100=""
+    valor_retenido=""
 
     with pdfplumber.open(pdf) as pdf_file:
 
@@ -96,24 +99,45 @@ def leer_retencion(pdf):
 
                     base_match=re.search(r"\d+\.\d+",texto)
 
+                    porc_match=re.search(r"(10|2|100)\.?\d*",texto)
+
+                    valor_match=re.findall(r"\d+\.\d+",texto)
+
                     if base_match:
 
                         base=float(base_match.group())
 
                         if "RENTA" in texto.upper():
 
-                            base0+=base
+                            base0=base
 
                         if "IVA" in texto.upper():
 
-                            base15+=base
+                            if base>0:
+                                base15=base
+                            else:
+                                base15=""
 
-                        porc=re.search(r"\b(10|2|100)\b",texto)
+                    if porc_match:
 
-                        if porc:
-                            porcentaje=int(porc.group())
+                        porcentaje=int(float(porc_match.group()))
 
-    return base0,base15,porcentaje
+                        if len(valor_match)>=2:
+                            valor=float(valor_match[-1])
+                            valor_retenido=valor
+                        else:
+                            valor=""
+
+                        if porcentaje==10:
+                            rete10=valor
+
+                        elif porcentaje==2:
+                            rete2=valor
+
+                        elif porcentaje==100:
+                            rete100=valor
+
+    return base0,base15,rete10,rete2,rete100,valor_retenido
 
 
 def procesar_pdf(pdf):
@@ -133,30 +157,14 @@ def procesar_pdf(pdf):
 
     autorizacion=buscar(texto,r"Autorizaci[oó]n[:\s]*([0-9]{10,})")
 
-    base0,base15,porcentaje=leer_retencion(pdf)
+    base0,base15,rete10,rete2,rete100,valor_retenido=leer_tabla_retencion(pdf)
 
-    propina=0
-    iva=0
+    propina=""
+    iva=""
 
-    if base15>0:
-        iva=round(base15*0.15,2)
+    total=""
 
-    total=base0+base15+propina+iva
-
-    rete10=0
-    rete2=0
-    rete100=0
-
-    if porcentaje==10:
-        rete10=round(total*0.10,2)
-
-    if porcentaje==2:
-        rete2=round(total*0.02,2)
-
-    if porcentaje==100:
-        rete100=round(iva*1,2)
-
-    total_retencion=rete10+rete2+rete100
+    total_retencion=valor_retenido
 
     fila={
         "FECHA":fecha,
@@ -177,8 +185,8 @@ def procesar_pdf(pdf):
         "RETE 10%":rete10,
         "RETE 100%":rete100,
         "2% R.FTE":rete2,
-        "TOTAL RETENCION":total_retencion,
-        "valor retenido":total_retencion
+        "TOTAL RETENCION":valor_retenido,
+        "valor retenido":valor_retenido
     }
 
     return fila
@@ -236,7 +244,7 @@ if uploaded_files:
 
         worksheet.set_column(0,20,18)
 
-        # --------- NUEVO: TABLAS POR MES ---------
+        # TABLAS POR MES
 
         fila_inicio=filas+4
 
