@@ -185,7 +185,7 @@ if uploaded_files:
 
     df=pd.DataFrame(datos,columns=columnas)
 
-    df["FECHA"]=pd.to_datetime(df["FECHA"],errors="coerce")
+    df["FECHA"]=pd.to_datetime(df["FECHA"],dayfirst=True,errors="coerce")
 
     st.dataframe(df)
 
@@ -214,6 +214,7 @@ if uploaded_files:
 
         fila_excel=0
 
+        # AGRUPAR CORRECTAMENTE POR MES
         meses=df.groupby(df["FECHA"].dt.to_period("M"))
 
         for mes,datos_mes in meses:
