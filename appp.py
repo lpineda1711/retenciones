@@ -150,14 +150,6 @@ def procesar_pdf(pdf):
 
     base0,base15,rete10,rete2,rete100,valor_retenido=leer_tabla_retencion(pdf)
 
-    # convertir a números si están vacíos
-    b0=float(base0) if base0!="" else 0
-    b15=float(base15) if base15!="" else 0
-    propina=0
-    iva=0
-
-    total=b0+b15+propina+iva
-
     fila={
         "FECHA":fecha,
         "IFIS":empresa,
@@ -167,11 +159,11 @@ def procesar_pdf(pdf):
         "AUTORIZACION":autorizacion,
         "NO OBJETO":"",
         "EXCENTO IVA":"",
-        "BASE 0%":b0,
-        "BASE 15%":b15,
-        "PROPINA":propina,
-        "IVA":iva,
-        "TOTAL":total,
+        "BASE 0%":base0,
+        "BASE 15%":base15,
+        "PROPINA":"",
+        "IVA":"",
+        "TOTAL":"",
         "N° RETENCION":"",
         "0% R.FTE":"",
         "RETE 10%":rete10,
@@ -193,7 +185,7 @@ if uploaded_files:
 
     df=pd.DataFrame(datos,columns=columnas)
 
-    df["FECHA"]=pd.to_datetime(df["FECHA"],errors="coerce").dt.strftime("%Y-%m-%d")
+    df["FECHA"]=pd.to_datetime(df["FECHA"],errors="coerce")
 
     st.dataframe(df)
 
@@ -220,7 +212,7 @@ if uploaded_files:
 
         fila_excel=0
 
-        meses=df.groupby(pd.to_datetime(df["FECHA"]).dt.to_period("M"))
+        meses=df.groupby(df["FECHA"].dt.to_period("M"))
 
         for mes,datos_mes in meses:
 
@@ -238,7 +230,15 @@ if uploaded_files:
             for i,row in datos_mes.iterrows():
 
                 for col,col_name in enumerate(columnas):
-                    worksheet.write(fila_excel,col,row[col_name])
+
+                    if col_name=="TOTAL":
+                        letra_i="I"
+                        letra_l="L"
+                        formula=f"=SUM({letra_i}{fila_excel+1}:{letra_l}{fila_excel+1})"
+                        worksheet.write_formula(fila_excel,col,formula)
+
+                    else:
+                        worksheet.write(fila_excel,col,row[col_name])
 
                 fila_excel+=1
 
