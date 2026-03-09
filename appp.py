@@ -73,7 +73,7 @@ def extraer_empresa(texto):
     return ""
 
 
-def leer_tabla_retenciones(texto):
+def leer_tabla_retenciones(pdf):
 
     base0=0
     base15=0
@@ -82,33 +82,56 @@ def leer_tabla_retenciones(texto):
     rete2=0
     rete100=0
 
-    patron=r"([0-9]+\.[0-9]+)\s+(Impuesto a la Renta|IVA)\s+([0-9]+)"
+    with pdfplumber.open(pdf) as pdf_file:
 
-    matches=re.findall(patron,texto,re.IGNORECASE)
+        for page in pdf_file.pages:
 
-    for base,impuesto,porcentaje in matches:
+            tablas=page.extract_tables()
 
-        base=float(base)
-        porcentaje=float(porcentaje)
+            for tabla in tablas:
 
-        if "RENTA" in impuesto.upper():
+                for fila in tabla:
 
-            base0+=base
+                    if not fila:
+                        continue
 
-        if "IVA" in impuesto.upper():
+                    fila_texto=" ".join([str(x) for x in fila if x])
 
-            base15+=base
+                    # buscar base
+                    base_match=re.search(r"\d+\.\d+",fila_texto)
 
-        valor_retencion=round(base*(porcentaje/100),2)
+                    if base_match:
 
-        if porcentaje==10:
-            rete10+=valor_retencion
+                        base=float(base_match.group())
 
-        elif porcentaje==2:
-            rete2+=valor_retencion
+                        if "RENTA" in fila_texto.upper():
 
-        elif porcentaje==100:
-            rete100+=valor_retencion
+                            base0+=base
+
+                        if "IVA" in fila_texto.upper():
+
+                            base15+=base
+
+                        porc_match=re.search(r"\d+\.\d+|\d+",fila_texto)
+
+                        if "%" in fila_texto or porc_match:
+
+                            porcentaje_match=re.search(r"\d{1,3}",fila_texto)
+
+                            if porcentaje_match:
+
+                                porcentaje=int(porcentaje_match.group())
+
+                                valor=round(base*(porcentaje/100),2)
+
+                                if porcentaje==10:
+                                    rete10+=valor
+
+                                elif porcentaje==2:
+                                    rete2+=valor
+
+                                elif porcentaje==100:
+                                    rete100+=valor
 
     return base0,base15,rete10,rete2,rete100
 
@@ -130,7 +153,7 @@ def procesar_pdf(pdf):
 
     autorizacion=buscar(texto,r"Autorizaci[oó]n[:\s]*([0-9]{10,})")
 
-    base0,base15,rete10,rete2,rete100=leer_tabla_retenciones(texto)
+    base0,base15,rete10,rete2,rete100=leer_tabla_retenciones(pdf)
 
     propina=0
     iva=0
