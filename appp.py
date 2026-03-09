@@ -1,256 +1,175 @@
-import streamlit as st
-import pandas as pd
 import pdfplumber
-import re
-from io import BytesIO
-from datetime import datetime
+import pandas as pd
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill
+import os
 
-st.set_page_config(page_title="Retenciones SRI", layout="wide")
+carpeta_pdfs = "pdfs"
+archivo_excel = "retenciones.xlsx"
 
-st.title("Generador de Retenciones SRI")
-
-uploaded_files = st.file_uploader(
-    "Subir comprobantes PDF",
-    type="pdf",
-    accept_multiple_files=True
-)
-
-columnas = [
-"FECHA","IFIS","N FACTURA","RUC","DOC IFIS","AUTORIZACION",
-"NO OBJETO","EXCENTO IVA","BASE 0%","BASE 15%","PROPINA","IVA",
-"TOTAL","N° RETENCION","0% R.FTE","RETE 10%","RETE 100%",
-"2% R.FTE","TOTAL RETENCION","valor retenido"
+encabezados = [
+    "MES",
+    "BASE 0%",
+    "BASE 15%",
+    "PROPINA",
+    "IVA",
+    "TOTAL",
+    "RETE 1%",
+    "RETE 2%",
+    "RETE 10%",
+    "RETE 100%",
+    "TOTAL RETENIDO"
 ]
 
+meses = [
+    "ENERO","FEBRERO","MARZO","ABRIL","MAYO","JUNIO",
+    "JULIO","AGOSTO","SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE"
+]
 
-def extraer_texto(pdf):
+fill_amarillo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 
-    texto=""
+wb = Workbook()
+ws = wb.active
+ws.title = "RETENCIONES"
 
-    with pdfplumber.open(pdf) as pdf_file:
-        for page in pdf_file.pages:
-            t=page.extract_text()
-            if t:
-                texto+=t+"\n"
+fila_excel = 1
 
-    return texto
+for mes in meses:
 
+    ws.cell(row=fila_excel, column=1, value=mes)
 
-def extraer_ruc(texto):
+    for col in range(1,len(encabezados)+1):
+        ws.cell(row=fila_excel,column=col).fill = fill_amarillo
 
-    ruc=re.search(r'RUC[:\s]*([0-9]{13})',texto)
+    fila_excel += 1
 
-    if ruc:
-        return ruc.group(1)
+    for col,enc in enumerate(encabezados,1):
+        ws.cell(row=fila_excel,column=col,value=enc)
+        ws.cell(row=fila_excel,column=col).fill = fill_amarillo
 
-    alt=re.search(r'\b[0-9]{13}\b',texto)
+    fila_excel += 1
 
-    if alt:
-        return alt.group(0)
+    for archivo in os.listdir(carpeta_pdfs):
 
-    return ""
+        if not archivo.lower().endswith(".pdf"):
+            continue
 
+        ruta = os.path.join(carpeta_pdfs,archivo)
 
-def buscar(texto,patron):
+        base0 = ""
+        base15 = ""
+        propina = 0
+        iva = 0
+        total = 0
 
-    m=re.search(patron,texto,re.IGNORECASE)
+        rete1=""
+        rete2=""
+        rete10=""
+        rete100=""
 
-    if m:
-        return m.group(1)
+        porcentaje = None
+        base_imponible = None
+        impuesto_tipo = ""
 
-    return ""
+        with pdfplumber.open(ruta) as pdf:
+            texto = ""
+            for pagina in pdf.pages:
+                texto += pagina.extract_text()
 
+        lineas = texto.split("\n")
 
-def extraer_empresa(texto):
+        for l in lineas:
 
-    lineas=texto.split("\n")
+            if "Base Imponible para la Retención" in l:
+                try:
+                    base_imponible = float(l.split()[-1])
+                except:
+                    pass
 
-    for l in lineas[:10]:
+            if "Impuesto" in l:
+                impuesto_tipo = l.lower()
 
-        if "S.A" in l.upper() or "CIA" in l.upper() or "LTDA" in l.upper():
-            return l.strip()
+            if "Porcentaje Retención" in l:
+                try:
+                    porcentaje = float(l.split()[-1])
+                except:
+                    pass
 
-    return ""
+            if "IVA" in l and iva == 0:
+                try:
+                    iva = float(l.split()[-1])
+                except:
+                    pass
 
+        if base_imponible != None:
 
-def leer_tabla_retencion(pdf):
+            if "iva" in impuesto_tipo:
+                base15 = base_imponible
+                base0 = ""
+            else:
+                base0 = base_imponible
+                base15 = ""
 
-    base0=""
-    base15=""
+        if isinstance(base0,float) or isinstance(base15,float):
+            total = (base0 if base0!="" else 0) + (base15 if base15!="" else 0) + propina + iva
 
-    rete10=""
-    rete2=""
-    rete100=""
-    valor_retenido=""
+        valor_retenido = ""
 
-    with pdfplumber.open(pdf) as pdf_file:
+        if porcentaje != None and base_imponible != None:
 
-        for page in pdf_file.pages:
+            valor_retenido = round(base_imponible * porcentaje / 100 ,2)
 
-            tablas=page.extract_tables()
+            if porcentaje == 1:
+                rete1 = valor_retenido
 
-            for tabla in tablas:
+            elif porcentaje == 2:
+                rete2 = valor_retenido
 
-                for fila in tabla:
+            elif porcentaje == 10:
+                rete10 = valor_retenido
 
-                    if not fila:
-                        continue
+            elif porcentaje == 100:
+                rete100 = valor_retenido
 
-                    texto=" ".join([str(x) for x in fila if x])
+        total_retenido = sum([
+            rete1 if isinstance(rete1,float) else 0,
+            rete2 if isinstance(rete2,float) else 0,
+            rete10 if isinstance(rete10,float) else 0,
+            rete100 if isinstance(rete100,float) else 0
+        ])
 
-                    numeros=re.findall(r"\d+\.\d+",texto)
+        datos = [
+            mes,
+            base0,
+            base15,
+            propina,
+            iva,
+            total,
+            rete1,
+            rete2,
+            rete10,
+            rete100,
+            total_retenido
+        ]
 
-                    porc=re.search(r"(10|2|100)",texto)
+        for col,val in enumerate(datos,1):
+            ws.cell(row=fila_excel,column=col,value=val)
 
-                    if numeros:
+        fila_excel += 1
 
-                        base=float(numeros[0])
+    fila_sumas = fila_excel
 
-                        if "RENTA" in texto.upper():
-                            base0=base
+    for col in range(2,len(encabezados)+1):
 
-                        if "IVA" in texto.upper() and base>0:
-                            base15=base
+        letra = ws.cell(row=1,column=col).column_letter
 
-                    if porc and len(numeros)>=2:
+        ws.cell(row=fila_sumas,column=col,
+        value=f"=SUM({letra}{fila_excel-10}:{letra}{fila_excel-1})")
 
-                        porcentaje=int(porc.group())
-                        valor=float(numeros[-1])
+        ws.cell(row=fila_sumas,column=col).fill = fill_amarillo
 
-                        valor_retenido=valor
+    fila_excel += 2
 
-                        if porcentaje==10:
-                            rete10=valor
+wb.save(archivo_excel)
 
-                        if porcentaje==2:
-                            rete2=valor
-
-                        if porcentaje==100:
-                            rete100=valor
-
-    return base0,base15,rete10,rete2,rete100,valor_retenido
-
-
-def procesar_pdf(pdf):
-
-    texto=extraer_texto(pdf)
-
-    fecha=buscar(texto,r"Fecha[:\s]*([0-9/\-]+)")
-
-    if fecha=="":
-        fecha=datetime.today().strftime("%Y-%m-%d")
-
-    empresa=extraer_empresa(texto)
-
-    factura=buscar(texto,r"No\.?\s*([0-9\-]+)")
-
-    ruc=extraer_ruc(texto)
-
-    autorizacion=buscar(texto,r"Autorizaci[oó]n[:\s]*([0-9]{10,})")
-
-    base0,base15,rete10,rete2,rete100,valor_retenido=leer_tabla_retencion(pdf)
-
-    fila={
-        "FECHA":fecha,
-        "IFIS":empresa,
-        "N FACTURA":factura,
-        "RUC":ruc,
-        "DOC IFIS":"",
-        "AUTORIZACION":autorizacion,
-        "NO OBJETO":"",
-        "EXCENTO IVA":"",
-        "BASE 0%":base0,
-        "BASE 15%":base15,
-        "PROPINA":"",
-        "IVA":"",
-        "TOTAL":"",
-        "N° RETENCION":"",
-        "0% R.FTE":"",
-        "RETE 10%":rete10,
-        "RETE 100%":rete100,
-        "2% R.FTE":rete2,
-        "TOTAL RETENCION":valor_retenido,
-        "valor retenido":valor_retenido
-    }
-
-    return fila
-
-
-if uploaded_files:
-
-    datos=[]
-
-    for file in uploaded_files:
-        datos.append(procesar_pdf(file))
-
-    df=pd.DataFrame(datos,columns=columnas)
-
-    df["FECHA"]=pd.to_datetime(df["FECHA"],errors="coerce")
-
-    st.dataframe(df)
-
-    output=BytesIO()
-
-    with pd.ExcelWriter(output,engine="xlsxwriter") as writer:
-
-        workbook=writer.book
-        worksheet=workbook.add_worksheet("RETENCIONES")
-        writer.sheets["RETENCIONES"]=worksheet
-
-        header_format=workbook.add_format({
-            "bold":True,
-            "align":"center",
-            "border":1,
-            "bg_color":"#FFFF00"
-        })
-
-        total_format=workbook.add_format({
-            "bold":True,
-            "border":1,
-            "bg_color":"#FFFF00"
-        })
-
-        fila_excel=0
-
-        meses=df.groupby(df["FECHA"].dt.to_period("M"))
-
-        for mes,datos_mes in meses:
-
-            worksheet.write(fila_excel,0,f"MES {mes}",header_format)
-
-            fila_excel+=1
-
-            for col,col_name in enumerate(columnas):
-                worksheet.write(fila_excel,col,col_name,header_format)
-
-            fila_excel+=1
-
-            for i,row in datos_mes.iterrows():
-
-                for col,col_name in enumerate(columnas):
-                    worksheet.write(fila_excel,col,row[col_name])
-
-                fila_excel+=1
-
-            worksheet.write(fila_excel,0,"TOTAL",total_format)
-
-            for col in range(8,20):
-
-                letra=chr(65+col)
-
-                formula=f"=SUM({letra}{fila_excel-len(datos_mes)}:{letra}{fila_excel})"
-
-                worksheet.write_formula(fila_excel,col,formula,total_format)
-
-            fila_excel+=3
-
-        worksheet.set_column(0,20,18)
-
-    output.seek(0)
-
-    st.download_button(
-        "Descargar Excel",
-        data=output,
-        file_name="retenciones_sri.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+print("Excel generado correctamente")
