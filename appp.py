@@ -187,6 +187,13 @@ if uploaded_files:
 
     df["FECHA"]=pd.to_datetime(df["FECHA"],dayfirst=True,errors="coerce")
 
+    # 🔹 AGREGADO: si la retención es 0 que aparezca 0 y no vacío
+    df["TOTAL RETENCION"]=df["TOTAL RETENCION"].fillna(0)
+    df["valor retenido"]=df["valor retenido"].fillna(0)
+    df["RETE 10%"]=df["RETE 10%"].fillna(0)
+    df["RETE 100%"]=df["RETE 100%"].fillna(0)
+    df["2% R.FTE"]=df["2% R.FTE"].fillna(0)
+
     st.dataframe(df)
 
     output=BytesIO()
@@ -214,7 +221,6 @@ if uploaded_files:
 
         fila_excel=0
 
-        # AGRUPAR CORRECTAMENTE POR MES
         meses=df.groupby(df["FECHA"].dt.to_period("M"))
 
         for mes,datos_mes in meses:
