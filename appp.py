@@ -100,7 +100,6 @@ def leer_tabla_retencion(pdf):
 
                     numeros=re.findall(r"\d+\.\d+",texto)
 
-                    # detectar porcentaje correctamente
                     porc=re.search(r"\b(1|2|8|10|20|30|70|100)\b",texto)
 
                     if numeros:
@@ -151,6 +150,14 @@ def procesar_pdf(pdf):
 
     base0,base15,rete10,rete2,rete100,valor_retenido=leer_tabla_retencion(pdf)
 
+    # convertir a números si están vacíos
+    b0=float(base0) if base0!="" else 0
+    b15=float(base15) if base15!="" else 0
+    propina=0
+    iva=0
+
+    total=b0+b15+propina+iva
+
     fila={
         "FECHA":fecha,
         "IFIS":empresa,
@@ -160,11 +167,11 @@ def procesar_pdf(pdf):
         "AUTORIZACION":autorizacion,
         "NO OBJETO":"",
         "EXCENTO IVA":"",
-        "BASE 0%":base0,
-        "BASE 15%":base15,
-        "PROPINA":"",
-        "IVA":"",
-        "TOTAL":"",
+        "BASE 0%":b0,
+        "BASE 15%":b15,
+        "PROPINA":propina,
+        "IVA":iva,
+        "TOTAL":total,
         "N° RETENCION":"",
         "0% R.FTE":"",
         "RETE 10%":rete10,
@@ -186,7 +193,7 @@ if uploaded_files:
 
     df=pd.DataFrame(datos,columns=columnas)
 
-    df["FECHA"]=pd.to_datetime(df["FECHA"],errors="coerce")
+    df["FECHA"]=pd.to_datetime(df["FECHA"],errors="coerce").dt.strftime("%Y-%m-%d")
 
     st.dataframe(df)
 
@@ -213,7 +220,7 @@ if uploaded_files:
 
         fila_excel=0
 
-        meses=df.groupby(df["FECHA"].dt.to_period("M"))
+        meses=df.groupby(pd.to_datetime(df["FECHA"]).dt.to_period("M"))
 
         for mes,datos_mes in meses:
 
@@ -235,7 +242,6 @@ if uploaded_files:
 
                 fila_excel+=1
 
-            # FILA TOTAL AMARILLA COMPLETA
             for col in range(len(columnas)):
                 worksheet.write(fila_excel,col,"",total_format)
 
