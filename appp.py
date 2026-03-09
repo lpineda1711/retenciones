@@ -138,7 +138,7 @@ def procesar_pdf(pdf):
     fecha=buscar(texto,r"Fecha[:\s]*([0-9/\-]+)")
 
     if fecha=="":
-        fecha=datetime.today().strftime("%Y-%m-%d")
+        fecha=datetime.today().strftime("%d/%m/%Y")
 
     empresa=extraer_empresa(texto)
 
@@ -210,6 +210,8 @@ if uploaded_files:
             "bg_color":"#FFFF00"
         })
 
+        date_format=workbook.add_format({'num_format':'dd/mm/yyyy'})
+
         fila_excel=0
 
         meses=df.groupby(df["FECHA"].dt.to_period("M"))
@@ -231,10 +233,13 @@ if uploaded_files:
 
                 for col,col_name in enumerate(columnas):
 
-                    if col_name=="TOTAL":
-                        letra_i="I"
-                        letra_l="L"
-                        formula=f"=SUM({letra_i}{fila_excel+1}:{letra_l}{fila_excel+1})"
+                    if col_name=="FECHA":
+                        worksheet.write_datetime(
+                            fila_excel,col,row[col_name],date_format
+                        )
+
+                    elif col_name=="TOTAL":
+                        formula=f"=SUM(I{fila_excel+1}:L{fila_excel+1})"
                         worksheet.write_formula(fila_excel,col,formula)
 
                     else:
