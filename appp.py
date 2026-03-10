@@ -81,8 +81,6 @@ def leer_tabla_retencion(pdf):
     rete10=""
     rete2=""
     rete100=""
-    rete5=""   # 🔹 AGREGADO retención 5%
-
     valor_retenido=""
 
     with pdfplumber.open(pdf) as pdf_file:
@@ -102,8 +100,7 @@ def leer_tabla_retencion(pdf):
 
                     numeros=re.findall(r"\d+\.\d+",texto)
 
-                    # 🔹 AGREGADO detección exacta de porcentaje
-                    porc=re.search(r"\b(1|2|5|8|10|20|30|70|100)\b",texto)
+                    porc=re.search(r"\b(1|2|8|10|20|30|70|100)\b",texto)
 
                     if numeros:
 
@@ -118,7 +115,6 @@ def leer_tabla_retencion(pdf):
                     if porc and len(numeros)>=2:
 
                         porcentaje=int(porc.group())
-
                         valor=float(numeros[-1])
 
                         valor_retenido=valor
@@ -132,11 +128,7 @@ def leer_tabla_retencion(pdf):
                         elif porcentaje==100:
                             rete100=valor
 
-                        # 🔹 AGREGADO RETENCIÓN 5%
-                        elif porcentaje==5:
-                            rete5=valor
-
-    return base0,base15,rete10,rete2,rete100,rete5,valor_retenido
+    return base0,base15,rete10,rete2,rete100,valor_retenido
 
 
 def procesar_pdf(pdf):
@@ -156,13 +148,9 @@ def procesar_pdf(pdf):
 
     autorizacion=buscar(texto,r"Autorizaci[oó]n[:\s]*([0-9]{10,})")
 
-    base0,base15,rete10,rete2,rete100,rete5,valor_retenido=leer_tabla_retencion(pdf)
+    base0,base15,rete10,rete2,rete100,valor_retenido=leer_tabla_retencion(pdf)
 
-    filas=[]
-
-    # 🔹 FILA RETE 10
-    if rete10!="":
-        fila={
+    fila={
         "FECHA":fecha,
         "IFIS":empresa,
         "N FACTURA":factura,
@@ -179,92 +167,13 @@ def procesar_pdf(pdf):
         "N° RETENCION":"",
         "0% R.FTE":"",
         "RETE 10%":rete10,
-        "RETE 100%":0,
-        "2% R.FTE":0,
-        "TOTAL RETENCION":rete10,
-        "valor retenido":rete10
-        }
-        filas.append(fila)
-
-    # 🔹 FILA RETE 2
-    if rete2!="":
-        fila={
-        "FECHA":fecha,
-        "IFIS":empresa,
-        "N FACTURA":factura,
-        "RUC":ruc,
-        "DOC IFIS":"",
-        "AUTORIZACION":autorizacion,
-        "NO OBJETO":"",
-        "EXCENTO IVA":"",
-        "BASE 0%":base0,
-        "BASE 15%":base15,
-        "PROPINA":"",
-        "IVA":"",
-        "TOTAL":"",
-        "N° RETENCION":"",
-        "0% R.FTE":"",
-        "RETE 10%":0,
-        "RETE 100%":0,
-        "2% R.FTE":rete2,
-        "TOTAL RETENCION":rete2,
-        "valor retenido":rete2
-        }
-        filas.append(fila)
-
-    # 🔹 FILA RETE 100
-    if rete100!="":
-        fila={
-        "FECHA":fecha,
-        "IFIS":empresa,
-        "N FACTURA":factura,
-        "RUC":ruc,
-        "DOC IFIS":"",
-        "AUTORIZACION":autorizacion,
-        "NO OBJETO":"",
-        "EXCENTO IVA":"",
-        "BASE 0%":base0,
-        "BASE 15%":base15,
-        "PROPINA":"",
-        "IVA":"",
-        "TOTAL":"",
-        "N° RETENCION":"",
-        "0% R.FTE":"",
-        "RETE 10%":0,
         "RETE 100%":rete100,
-        "2% R.FTE":0,
-        "TOTAL RETENCION":rete100,
-        "valor retenido":rete100
-        }
-        filas.append(fila)
+        "2% R.FTE":rete2,
+        "TOTAL RETENCION":"",
+        "valor retenido":""
+    }
 
-    # 🔹 AGREGADO FILA RETE 5
-    if rete5!="":
-        fila={
-        "FECHA":fecha,
-        "IFIS":empresa,
-        "N FACTURA":factura,
-        "RUC":ruc,
-        "DOC IFIS":"",
-        "AUTORIZACION":autorizacion,
-        "NO OBJETO":"",
-        "EXCENTO IVA":"",
-        "BASE 0%":base0,
-        "BASE 15%":base15,
-        "PROPINA":"",
-        "IVA":"",
-        "TOTAL":"",
-        "N° RETENCION":"",
-        "0% R.FTE":"",
-        "RETE 10%":0,
-        "RETE 100%":0,
-        "2% R.FTE":0,
-        "TOTAL RETENCION":rete5,
-        "valor retenido":rete5
-        }
-        filas.append(fila)
-
-    return filas
+    return fila
 
 
 if uploaded_files:
@@ -272,16 +181,12 @@ if uploaded_files:
     datos=[]
 
     for file in uploaded_files:
-        filas=procesar_pdf(file)
-        for f in filas:
-            datos.append(f)
+        datos.append(procesar_pdf(file))
 
     df=pd.DataFrame(datos,columns=columnas)
 
     df["FECHA"]=pd.to_datetime(df["FECHA"],dayfirst=True,errors="coerce")
 
-    df["TOTAL RETENCION"]=df["TOTAL RETENCION"].fillna(0)
-    df["valor retenido"]=df["valor retenido"].fillna(0)
     df["RETE 10%"]=df["RETE 10%"].fillna(0)
     df["RETE 100%"]=df["RETE 100%"].fillna(0)
     df["2% R.FTE"]=df["2% R.FTE"].fillna(0)
@@ -339,6 +244,16 @@ if uploaded_files:
 
                     elif col_name=="TOTAL":
                         formula=f"=SUM(I{fila_excel+1}:L{fila_excel+1})"
+                        worksheet.write_formula(fila_excel,col,formula)
+
+                    # 🔹 AGREGADO FORMULA TOTAL RETENCION
+                    elif col_name=="TOTAL RETENCION":
+                        formula=f"=SUM(O{fila_excel+1}:R{fila_excel+1})"
+                        worksheet.write_formula(fila_excel,col,formula)
+
+                    # 🔹 AGREGADO VALOR RETENIDO = TOTAL RETENCION
+                    elif col_name=="valor retenido":
+                        formula=f"=S{fila_excel+1}"
                         worksheet.write_formula(fila_excel,col,formula)
 
                     else:
