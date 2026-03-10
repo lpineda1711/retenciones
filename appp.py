@@ -85,14 +85,26 @@ def leer_tabla_retencion(pdf):
                         if "IVA" in texto:
                             base15=base
 
-                        if "10" in texto:
-                            rete10+=valor
+                        # 🔹 SOLO PONER EL VALOR EN LA RETENCION QUE CORRESPONDA
+                        porcentaje=re.search(r"\b(10|2|100)\b",texto)
 
-                        if "2" in texto and "12" not in texto:
-                            rete2+=valor
+                        if porcentaje:
+                            p=int(porcentaje.group())
 
-                        if "100" in texto:
-                            rete100+=valor
+                            if p==10:
+                                rete10=valor
+                                rete2=0
+                                rete100=0
+
+                            elif p==2:
+                                rete2=valor
+                                rete10=0
+                                rete100=0
+
+                            elif p==100:
+                                rete100=valor
+                                rete10=0
+                                rete2=0
 
     total_retencion = rete10 + rete2 + rete100
 
