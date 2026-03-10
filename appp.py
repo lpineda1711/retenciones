@@ -82,7 +82,8 @@ def leer_tabla_retencion(pdf):
     rete2=""
     rete100=""
     valor_retenido=""
-    rete5=""   # 🔹 AGREGADO
+
+    otras_retenciones=[]  # 🔹 AGREGADO
 
     with pdfplumber.open(pdf) as pdf_file:
 
@@ -101,7 +102,7 @@ def leer_tabla_retencion(pdf):
 
                     numeros=re.findall(r"\d+\.\d+",texto)
 
-                    porc=re.search(r"\b(1|2|5|8|10|20|30|70|100)\b",texto)  # 🔹 AGREGADO 5%
+                    porc=re.search(r"\b([0-9]{1,3})\b",texto)  # 🔹 AGREGADO
 
                     if numeros:
 
@@ -129,10 +130,10 @@ def leer_tabla_retencion(pdf):
                         elif porcentaje==100:
                             rete100=valor
 
-                        elif porcentaje==5:  # 🔹 AGREGADO
-                            rete5=valor
+                        else:  # 🔹 AGREGADO (cualquier otro porcentaje)
+                            otras_retenciones.append(valor)
 
-    return base0,base15,rete10,rete2,rete100,valor_retenido,rete5  # 🔹 AGREGADO
+    return base0,base15,rete10,rete2,rete100,valor_retenido,otras_retenciones
 
 
 def procesar_pdf(pdf):
@@ -152,7 +153,7 @@ def procesar_pdf(pdf):
 
     autorizacion=buscar(texto,r"Autorizaci[oó]n[:\s]*([0-9]{10,})")
 
-    base0,base15,rete10,rete2,rete100,valor_retenido,rete5=leer_tabla_retencion(pdf)  # 🔹 AGREGADO
+    base0,base15,rete10,rete2,rete100,valor_retenido,otras_retenciones=leer_tabla_retencion(pdf)
 
     fila={
         "FECHA":fecha,
@@ -179,15 +180,19 @@ def procesar_pdf(pdf):
 
     filas=[fila]
 
-    # 🔹 AGREGADO: si existe retención 5% crea otra fila
-    if rete5!="":
-        fila5=fila.copy()
-        fila5["RETE 10%"]=""
-        fila5["RETE 100%"]=""
-        fila5["2% R.FTE"]=""
-        fila5["TOTAL RETENCION"]=rete5
-        fila5["valor retenido"]=rete5
-        filas.append(fila5)
+    # 🔹 AGREGADO: crear filas nuevas para otras retenciones (ej 5%)
+    for valor in otras_retenciones:
+
+        nueva=fila.copy()
+
+        nueva["RETE 10%"]=""
+        nueva["RETE 100%"]=""
+        nueva["2% R.FTE"]=""
+
+        nueva["TOTAL RETENCION"]=valor
+        nueva["valor retenido"]=valor
+
+        filas.append(nueva)
 
     return filas
 
@@ -197,14 +202,14 @@ if uploaded_files:
     datos=[]
 
     for file in uploaded_files:
-        filas_pdf=procesar_pdf(file)   # 🔹 AGREGADO
-        datos.extend(filas_pdf)        # 🔹 AGREGADO
+
+        filas_pdf=procesar_pdf(file)  # 🔹 AGREGADO
+        datos.extend(filas_pdf)       # 🔹 AGREGADO
 
     df=pd.DataFrame(datos,columns=columnas)
 
     df["FECHA"]=pd.to_datetime(df["FECHA"],dayfirst=True,errors="coerce")
 
-    # 🔹 AGREGADO: si la retención es 0 que aparezca 0 y no vacío
     df["TOTAL RETENCION"]=df["TOTAL RETENCION"].fillna(0)
     df["valor retenido"]=df["valor retenido"].fillna(0)
     df["RETE 10%"]=df["RETE 10%"].fillna(0)
