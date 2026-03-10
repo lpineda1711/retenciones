@@ -16,10 +16,10 @@ uploaded_files = st.file_uploader(
 )
 
 columnas = [
-    "FECHA","IFIS","N FACTURA","RUC","DOC IFIS","AUTORIZACION",
-    "NO OBJETO","EXCENTO IVA","BASE 0%","BASE 15%","PROPINA","IVA",
-    "TOTAL","N° RETENCION","0% R.FTE","RETE 10%","RETE 100%",
-    "2% R.FTE","TOTAL RETENCION","valor retenido"
+"FECHA","IFIS","N FACTURA","RUC","DOC IFIS","AUTORIZACION",
+"NO OBJETO","EXCENTO IVA","BASE 0%","BASE 15%","PROPINA","IVA",
+"TOTAL","N° RETENCION","0% R.FTE","RETE 10%","RETE 100%",
+"2% R.FTE","TOTAL RETENCION","valor retenido"
 ]
 
 
@@ -28,11 +28,8 @@ def extraer_texto(pdf):
     texto=""
 
     with pdfplumber.open(pdf) as pdf_file:
-
         for page in pdf_file.pages:
-
             t=page.extract_text()
-
             if t:
                 texto+=t+"\n"
 
@@ -184,7 +181,6 @@ if uploaded_files:
     datos=[]
 
     for file in uploaded_files:
-
         datos.append(procesar_pdf(file))
 
     df=pd.DataFrame(datos,columns=columnas)
@@ -206,7 +202,6 @@ if uploaded_files:
 
         workbook=writer.book
         worksheet=workbook.add_worksheet("RETENCIONES")
-
         writer.sheets["RETENCIONES"]=worksheet
 
         header_format=workbook.add_format({
@@ -235,7 +230,6 @@ if uploaded_files:
             fila_excel+=1
 
             for col,col_name in enumerate(columnas):
-
                 worksheet.write(fila_excel,col,col_name,header_format)
 
             fila_excel+=1
@@ -247,25 +241,20 @@ if uploaded_files:
                 for col,col_name in enumerate(columnas):
 
                     if col_name=="FECHA":
-
                         worksheet.write_datetime(
                             fila_excel,col,row[col_name],date_format
                         )
 
                     elif col_name=="TOTAL":
-
                         formula=f"=SUM(I{fila_excel+1}:L{fila_excel+1})"
-
                         worksheet.write_formula(fila_excel,col,formula)
 
                     else:
-
                         worksheet.write(fila_excel,col,row[col_name])
 
                 fila_excel+=1
 
             for col in range(len(columnas)):
-
                 worksheet.write(fila_excel,col,"",total_format)
 
             worksheet.write(fila_excel,0,"TOTAL",total_format)
