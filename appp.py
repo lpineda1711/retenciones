@@ -61,13 +61,11 @@ def leer_tabla_retencion(pdf):
     rete100=0
 
     with pdfplumber.open(pdf) as pdf_file:
-
         for page in pdf_file.pages:
 
             tablas=page.extract_tables()
 
             for tabla in tablas:
-
                 for fila in tabla:
 
                     if not fila:
@@ -79,32 +77,27 @@ def leer_tabla_retencion(pdf):
 
                     porcentaje=re.search(r"\b(100|10|2)\b",texto)
 
-                    if len(numeros)>=2:
+                    if len(numeros)>=2 and porcentaje:
 
                         base=float(numeros[0].replace(",","."))
                         valor=float(numeros[-1].replace(",","."))
-                        
-                        # BASE IMPONIBLE PARA LA RETENCIÓN
-                        if "BASE IMPONIBLE" in texto or "IMPONIBLE" in texto:
 
-                            if "IVA" in texto:
-                                base15=base
-                            else:
-                                base0=base
+                        porc=int(porcentaje.group())
 
-                        # RETENCIONES
-                        if porcentaje:
+                        if porc==10:
+                            rete10=valor
 
-                            porc=int(porcentaje.group())
+                        elif porc==2:
+                            rete2=valor
 
-                            if porc==10:
-                                rete10=valor
+                        elif porc==100:
+                            rete100=valor
 
-                            elif porc==2:
-                                rete2=valor
+                        if "RENTA" in texto:
+                            base0=base
 
-                            elif porc==100:
-                                rete100=valor
+                        if "IVA" in texto:
+                            base15=base
 
     total_retencion = rete10 + rete2 + rete100
 
@@ -164,8 +157,6 @@ if uploaded_files:
 
     df["FECHA"]=pd.to_datetime(df["FECHA"],dayfirst=True,errors="coerce")
 
-    df["BASE 0%"]=df["BASE 0%"].fillna(0)
-    df["BASE 15%"]=df["BASE 15%"].fillna(0)
     df["TOTAL RETENCION"]=df["TOTAL RETENCION"].fillna(0)
     df["valor retenido"]=df["valor retenido"].fillna(0)
     df["RETE 10%"]=df["RETE 10%"].fillna(0)
@@ -189,40 +180,66 @@ if uploaded_files:
             "bg_color":"#FFFF00"
         })
 
+        total_format=workbook.add_format({
+            "bold":True,
+            "border":1,
+            "bg_color":"#FFFF00"
+        })
+
         date_format=workbook.add_format({'num_format':'dd/mm/yyyy'})
 
         fila_excel=0
 
-        for col,col_name in enumerate(columnas):
-            worksheet.write(fila_excel,col,col_name,header_format)
+        meses=df.groupby(df["FECHA"].dt.to_period("M"))
 
-        fila_excel+=1
+        for mes,datos_mes in meses:
 
-        for i,row in df.iterrows():
+            worksheet.write(fila_excel,0,f"MES {mes}",header_format)
+            fila_excel+=1
 
             for col,col_name in enumerate(columnas):
-
-                if col_name=="FECHA":
-                    worksheet.write_datetime(
-                        fila_excel,col,row[col_name],date_format
-                    )
-
-                elif col_name=="TOTAL":
-                    formula=f"=SUM(I{fila_excel+1}:L{fila_excel+1})"
-                    worksheet.write_formula(fila_excel,col,formula)
-
-                elif col_name=="TOTAL RETENCION":
-                    formula=f"=SUM(P{fila_excel+1}:R{fila_excel+1})"
-                    worksheet.write_formula(fila_excel,col,formula)
-
-                elif col_name=="valor retenido":
-                    formula=f"=S{fila_excel+1}"
-                    worksheet.write_formula(fila_excel,col,formula)
-
-                else:
-                    worksheet.write(fila_excel,col,row[col_name])
+                worksheet.write(fila_excel,col,col_name,header_format)
 
             fila_excel+=1
+            inicio_datos=fila_excel
+
+            for i,row in datos_mes.iterrows():
+
+                for col,col_name in enumerate(columnas):
+
+                    if col_name=="FECHA":
+                        worksheet.write_datetime(
+                            fila_excel,col,row[col_name],date_format
+                        )
+
+                    elif col_name=="TOTAL":
+                        formula=f"=SUM(I{fila_excel+1}:L{fila_excel+1})"
+                        worksheet.write_formula(fila_excel,col,formula)
+
+                    elif col_name=="TOTAL RETENCION":
+                        formula=f"=SUM(P{fila_excel+1}:R{fila_excel+1})"
+                        worksheet.write_formula(fila_excel,col,formula)
+
+                    elif col_name=="valor retenido":
+                        formula=f"=S{fila_excel+1}"
+                        worksheet.write_formula(fila_excel,col,formula)
+
+                    else:
+                        worksheet.write(fila_excel,col,row[col_name])
+
+                fila_excel+=1
+
+            for col in range(len(columnas)):
+                worksheet.write(fila_excel,col,"",total_format)
+
+            worksheet.write(fila_excel,0,"TOTAL",total_format)
+
+            for col in range(8,20):
+                letra=chr(65+col)
+                formula=f"=SUM({letra}{inicio_datos+1}:{letra}{fila_excel})"
+                worksheet.write_formula(fila_excel,col,formula,total_format)
+
+            fila_excel+=3
 
         worksheet.set_column(0,20,18)
 
