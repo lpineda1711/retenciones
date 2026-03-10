@@ -81,6 +81,9 @@ def leer_tabla_retencion(pdf):
     rete10=""
     rete2=""
     rete100=""
+
+    otras_retenciones=[]   # 🔹 AGREGADO
+
     valor_retenido=""
 
     with pdfplumber.open(pdf) as pdf_file:
@@ -98,13 +101,10 @@ def leer_tabla_retencion(pdf):
 
                     texto=" ".join([str(x) for x in fila if x])
 
-                    # detectar números con punto o coma
                     numeros=re.findall(r"\d+[.,]\d+",texto)
-
                     numeros=[float(n.replace(",",".")) for n in numeros]
 
-                    # detectar porcentaje correctamente
-                    porc=re.search(r"\b(100|10|2|5|1|8|20|30|70)(?:[.,]00)?\b",texto)
+                    porc=re.search(r"\b(1|2|5|8|10|20|30|70|100)(?:[.,]00)?\b",texto)
 
                     if numeros:
 
@@ -133,7 +133,10 @@ def leer_tabla_retencion(pdf):
                         elif porcentaje==100:
                             rete100=valor
 
-    return base0,base15,rete10,rete2,rete100,valor_retenido
+                        else:
+                            otras_retenciones.append((porcentaje,valor))  # 🔹 AGREGADO
+
+    return base0,base15,rete10,rete2,rete100,valor_retenido,otras_retenciones
 
 
 def procesar_pdf(pdf):
@@ -153,7 +156,9 @@ def procesar_pdf(pdf):
 
     autorizacion=buscar(texto,r"Autorizaci[oó]n[:\s]*([0-9]{10,})")
 
-    base0,base15,rete10,rete2,rete100,valor_retenido=leer_tabla_retencion(pdf)
+    base0,base15,rete10,rete2,rete100,valor_retenido,otras_retenciones=leer_tabla_retencion(pdf)
+
+    filas=[]
 
     fila={
         "FECHA":fecha,
@@ -178,7 +183,38 @@ def procesar_pdf(pdf):
         "valor retenido":""
     }
 
-    return fila
+    filas.append(fila)
+
+    # 🔹 AGREGADO: crear fila extra si hay otros porcentajes
+
+    for porcentaje,valor in otras_retenciones:
+
+        fila_extra={
+        "FECHA":fecha,
+        "IFIS":empresa,
+        "N FACTURA":factura,
+        "RUC":ruc,
+        "DOC IFIS":"",
+        "AUTORIZACION":autorizacion,
+        "NO OBJETO":"",
+        "EXCENTO IVA":"",
+        "BASE 0%":base0,
+        "BASE 15%":base15,
+        "PROPINA":"",
+        "IVA":"",
+        "TOTAL":"",
+        "N° RETENCION":f"{porcentaje}%",
+        "0% R.FTE":valor,
+        "RETE 10%":0,
+        "RETE 100%":0,
+        "2% R.FTE":0,
+        "TOTAL RETENCION":"",
+        "valor retenido":""
+        }
+
+        filas.append(fila_extra)
+
+    return filas
 
 
 if uploaded_files:
@@ -186,7 +222,8 @@ if uploaded_files:
     datos=[]
 
     for file in uploaded_files:
-        datos.append(procesar_pdf(file))
+        filas=procesar_pdf(file)
+        datos.extend(filas)
 
     df=pd.DataFrame(datos,columns=columnas)
 
