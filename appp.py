@@ -80,7 +80,6 @@ def leer_tabla_retencion(pdf):
                         continue
 
                     texto=" ".join([str(x) for x in fila if x]).upper()
-
                     numeros=re.findall(r"\d+\.\d+",texto)
 
                     if len(numeros)>=2:
@@ -119,9 +118,13 @@ def leer_tabla_retencion(pdf):
                             elif p=="100":
                                 rete100=valor
 
-    total_retencion = rete1 + rete175 + rete2 + rete275 + rete3 + rete5 + rete10 + rete15 + rete100
+    total_retencion = (
+        rete1 + rete175 + rete2 + rete275 +
+        rete3 + rete5 + rete10 + rete15 + rete100
+    )
 
-    return base0,base15,rete1,rete175,rete2,rete275,rete3,rete5,rete10,rete15,rete100,rete100,total_retencion
+    return base0,base15,rete1,rete175,rete2,rete275,rete3,rete5,rete10,rete15,rete100,total_retencion
+
 
 def procesar_pdf(pdf):
 
@@ -136,7 +139,7 @@ def procesar_pdf(pdf):
     ruc=extraer_ruc(texto)
     autorizacion=buscar(texto,r"Autorizaci[oó]n[:\s]*([0-9]{10,})")
 
-    base0,base15,rete1,rete175,rete2,rete275,rete3,rete5,rete10,rete15,rete100,rete100,total_retencion = leer_tabla_retencion(pdf)
+    base0,base15,rete1,rete175,rete2,rete275,rete3,rete5,rete10,rete15,rete100,total_retencion = leer_tabla_retencion(pdf)
 
     fila={
         "FECHA":fecha,
@@ -181,9 +184,6 @@ if uploaded_files:
     df=pd.DataFrame(datos,columns=columnas)
 
     df["FECHA"]=pd.to_datetime(df["FECHA"],dayfirst=True,errors="coerce")
-
-    df["TOTAL RETENCION"]=df["TOTAL RETENCION"].fillna(0)
-    df["valor retenido"]=df["valor retenido"].fillna(0)
 
     st.dataframe(df)
 
@@ -236,6 +236,14 @@ if uploaded_files:
 
                     elif col_name=="TOTAL":
                         formula=f"=SUM(I{fila_excel+1}:L{fila_excel+1})"
+                        worksheet.write_formula(fila_excel,col,formula)
+
+                    elif col_name=="TOTAL RETENCION":
+                        formula=f"=SUM(P{fila_excel+1}:X{fila_excel+1})"
+                        worksheet.write_formula(fila_excel,col,formula)
+
+                    elif col_name=="valor retenido":
+                        formula=f"=Y{fila_excel+1}"
                         worksheet.write_formula(fila_excel,col,formula)
 
                     else:
