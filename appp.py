@@ -70,29 +70,32 @@ def leer_tabla_retencion(pdf):
                     if not fila:
                         continue
 
-                    texto=" ".join([str(x) for x in fila if x]).upper()
+                    texto=" ".join([str(x) for x in fila if x])
 
-                    numeros=re.findall(r"\d+\.\d+",texto)
+                    numeros=re.findall(r"\d+[.,]\d+",texto)
 
-                    if len(numeros)>=2:
+                    porcentaje=re.search(r"(100,00|10,00|2,00)",texto)
 
-                        base=float(numeros[0])
-                        valor=float(numeros[-1])
+                    if numeros and porcentaje:
 
-                        if "RENTA" in texto:
-                            base0=base
+                        base=float(numeros[0].replace(",","."))
+                        valor=float(numeros[-1].replace(",","."))
+                        porc=porcentaje.group()
 
-                        if "IVA" in texto:
-                            base15=base
-
-                        if "10" in texto:
+                        if porc=="10,00":
                             rete10+=valor
 
-                        if "2" in texto and "12" not in texto:
+                        elif porc=="2,00":
                             rete2+=valor
 
-                        if "100" in texto:
+                        elif porc=="100,00":
                             rete100+=valor
+
+                        if base0==0:
+                            base0=base
+
+                        if base15==0:
+                            base15=base
 
     total_retencion = rete10 + rete2 + rete100
 
@@ -144,8 +147,7 @@ if uploaded_files:
     datos=[]
 
     for file in uploaded_files:
-        fila=procesar_pdf(file)
-        datos.append(fila)
+        datos.append(procesar_pdf(file))
 
     df=pd.DataFrame(datos,columns=columnas)
 
@@ -215,7 +217,7 @@ if uploaded_files:
                         worksheet.write_formula(fila_excel,col,formula)
 
                     elif col_name=="valor retenido":
-                        formula=f"=S{fila_excel+1}"
+                        formula=f"S{fila_excel+1}"
                         worksheet.write_formula(fila_excel,col,formula)
 
                     else:
