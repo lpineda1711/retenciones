@@ -62,6 +62,7 @@ def leer_tabla_retencion(pdf):
 
     with pdfplumber.open(pdf) as pdf_file:
         for page in pdf_file.pages:
+
             tablas=page.extract_tables()
 
             for tabla in tablas:
@@ -72,12 +73,25 @@ def leer_tabla_retencion(pdf):
 
                     texto=" ".join([str(x) for x in fila if x]).upper()
 
-                    numeros=re.findall(r"\d+\.\d+",texto)
+                    numeros=re.findall(r"\d+[.,]\d+",texto)
 
-                    if len(numeros)>=2:
+                    porcentaje=re.search(r"\b(100|10|2)\b",texto)
 
-                        base=float(numeros[0])
-                        valor=float(numeros[-1])
+                    if len(numeros)>=2 and porcentaje:
+
+                        base=float(numeros[0].replace(",","."))
+                        valor=float(numeros[-1].replace(",","."))
+
+                        porc=int(porcentaje.group())
+
+                        if porc==10:
+                            rete10=valor
+
+                        elif porc==2:
+                            rete2=valor
+
+                        elif porc==100:
+                            rete100=valor
 
                         if "RENTA" in texto:
                             base0=base
@@ -85,18 +99,10 @@ def leer_tabla_retencion(pdf):
                         if "IVA" in texto:
                             base15=base
 
-                        if "10" in texto:
-                            rete10+=valor
-
-                        if "2" in texto and "12" not in texto:
-                            rete2+=valor
-
-                        if "100" in texto:
-                            rete100+=valor
-
     total_retencion = rete10 + rete2 + rete100
 
     return base0,base15,rete10,rete2,rete100,total_retencion
+
 
 def procesar_pdf(pdf):
 
