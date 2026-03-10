@@ -61,11 +61,13 @@ def leer_tabla_retencion(pdf):
     rete100=0
 
     with pdfplumber.open(pdf) as pdf_file:
+
         for page in pdf_file.pages:
 
             tablas=page.extract_tables()
 
             for tabla in tablas:
+
                 for fila in tabla:
 
                     if not fila:
@@ -75,11 +77,20 @@ def leer_tabla_retencion(pdf):
 
                     numeros=re.findall(r"\d+[.,]\d+",texto)
 
+                    # detectar base aunque no haya retención
+                    if "0%" in texto and numeros:
+                        base0=float(numeros[0].replace(",","."))
+                        continue
+
+                    if "15%" in texto and numeros:
+                        base15=float(numeros[0].replace(",","."))
+                        continue
+
+                    # detectar retenciones
                     porcentaje=re.search(r"\b(100|10|2)\b",texto)
 
                     if len(numeros)>=2 and porcentaje:
 
-                        base=float(numeros[0].replace(",","."))
                         valor=float(numeros[-1].replace(",","."))
 
                         porc=int(porcentaje.group())
@@ -92,12 +103,6 @@ def leer_tabla_retencion(pdf):
 
                         elif porc==100:
                             rete100=valor
-
-                        if "RENTA" in texto:
-                            base0=base
-
-                        if "IVA" in texto:
-                            base15=base
 
     total_retencion = rete10 + rete2 + rete100
 
@@ -157,6 +162,8 @@ if uploaded_files:
 
     df["FECHA"]=pd.to_datetime(df["FECHA"],dayfirst=True,errors="coerce")
 
+    df["BASE 0%"]=df["BASE 0%"].fillna(0)
+    df["BASE 15%"]=df["BASE 15%"].fillna(0)
     df["TOTAL RETENCION"]=df["TOTAL RETENCION"].fillna(0)
     df["valor retenido"]=df["valor retenido"].fillna(0)
     df["RETE 10%"]=df["RETE 10%"].fillna(0)
