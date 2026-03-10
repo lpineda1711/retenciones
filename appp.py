@@ -19,7 +19,7 @@ columnas = [
 "FECHA","IFIS","N FACTURA","RUC","DOC IFIS","AUTORIZACION",
 "NO OBJETO","EXCENTO IVA","BASE 0%","BASE 15%","PROPINA","IVA",
 "TOTAL","N° RETENCION","0% R.FTE","RETE 10%","RETE 100%",
-"2% R.FTE","RETE 5%","TOTAL RETENCION","valor retenido"
+"2% R.FTE","TOTAL RETENCION","valor retenido"
 ]
 
 
@@ -81,7 +81,8 @@ def leer_tabla_retencion(pdf):
     rete10=""
     rete2=""
     rete100=""
-    rete5=""
+    rete5=""   # 🔹 AGREGADO retención 5%
+
     valor_retenido=""
 
     with pdfplumber.open(pdf) as pdf_file:
@@ -99,14 +100,14 @@ def leer_tabla_retencion(pdf):
 
                     texto=" ".join([str(x) for x in fila if x])
 
-                    numeros=re.findall(r"\d+[.,]\d+",texto)
+                    numeros=re.findall(r"\d+\.\d+",texto)
 
-                    # 🔹 buscar porcentaje SOLO si tiene símbolo %
-                    porc=re.search(r"(\d+)\s*%",texto)
+                    # 🔹 AGREGADO detección exacta de porcentaje
+                    porc=re.search(r"\b(1|2|5|8|10|20|30|70|100)\b",texto)
 
                     if numeros:
 
-                        base=float(numeros[0].replace(",", "."))
+                        base=float(numeros[0])
 
                         if "RENTA" in texto.upper():
                             base0=base
@@ -114,10 +115,11 @@ def leer_tabla_retencion(pdf):
                         if "IVA" in texto.upper() and base>0:
                             base15=base
 
-                    if porc and len(numeros)>=1:
+                    if porc and len(numeros)>=2:
 
-                        porcentaje=int(porc.group(1))
-                        valor=float(numeros[-1].replace(",", "."))
+                        porcentaje=int(porc.group())
+
+                        valor=float(numeros[-1])
 
                         valor_retenido=valor
 
@@ -130,6 +132,7 @@ def leer_tabla_retencion(pdf):
                         elif porcentaje==100:
                             rete100=valor
 
+                        # 🔹 AGREGADO RETENCIÓN 5%
                         elif porcentaje==5:
                             rete5=valor
 
@@ -155,7 +158,11 @@ def procesar_pdf(pdf):
 
     base0,base15,rete10,rete2,rete100,rete5,valor_retenido=leer_tabla_retencion(pdf)
 
-    fila={
+    filas=[]
+
+    # 🔹 FILA RETE 10
+    if rete10!="":
+        fila={
         "FECHA":fecha,
         "IFIS":empresa,
         "N FACTURA":factura,
@@ -172,14 +179,92 @@ def procesar_pdf(pdf):
         "N° RETENCION":"",
         "0% R.FTE":"",
         "RETE 10%":rete10,
-        "RETE 100%":rete100,
-        "2% R.FTE":rete2,
-        "RETE 5%":rete5,
-        "TOTAL RETENCION":valor_retenido,
-        "valor retenido":valor_retenido
-    }
+        "RETE 100%":0,
+        "2% R.FTE":0,
+        "TOTAL RETENCION":rete10,
+        "valor retenido":rete10
+        }
+        filas.append(fila)
 
-    return fila
+    # 🔹 FILA RETE 2
+    if rete2!="":
+        fila={
+        "FECHA":fecha,
+        "IFIS":empresa,
+        "N FACTURA":factura,
+        "RUC":ruc,
+        "DOC IFIS":"",
+        "AUTORIZACION":autorizacion,
+        "NO OBJETO":"",
+        "EXCENTO IVA":"",
+        "BASE 0%":base0,
+        "BASE 15%":base15,
+        "PROPINA":"",
+        "IVA":"",
+        "TOTAL":"",
+        "N° RETENCION":"",
+        "0% R.FTE":"",
+        "RETE 10%":0,
+        "RETE 100%":0,
+        "2% R.FTE":rete2,
+        "TOTAL RETENCION":rete2,
+        "valor retenido":rete2
+        }
+        filas.append(fila)
+
+    # 🔹 FILA RETE 100
+    if rete100!="":
+        fila={
+        "FECHA":fecha,
+        "IFIS":empresa,
+        "N FACTURA":factura,
+        "RUC":ruc,
+        "DOC IFIS":"",
+        "AUTORIZACION":autorizacion,
+        "NO OBJETO":"",
+        "EXCENTO IVA":"",
+        "BASE 0%":base0,
+        "BASE 15%":base15,
+        "PROPINA":"",
+        "IVA":"",
+        "TOTAL":"",
+        "N° RETENCION":"",
+        "0% R.FTE":"",
+        "RETE 10%":0,
+        "RETE 100%":rete100,
+        "2% R.FTE":0,
+        "TOTAL RETENCION":rete100,
+        "valor retenido":rete100
+        }
+        filas.append(fila)
+
+    # 🔹 AGREGADO FILA RETE 5
+    if rete5!="":
+        fila={
+        "FECHA":fecha,
+        "IFIS":empresa,
+        "N FACTURA":factura,
+        "RUC":ruc,
+        "DOC IFIS":"",
+        "AUTORIZACION":autorizacion,
+        "NO OBJETO":"",
+        "EXCENTO IVA":"",
+        "BASE 0%":base0,
+        "BASE 15%":base15,
+        "PROPINA":"",
+        "IVA":"",
+        "TOTAL":"",
+        "N° RETENCION":"",
+        "0% R.FTE":"",
+        "RETE 10%":0,
+        "RETE 100%":0,
+        "2% R.FTE":0,
+        "TOTAL RETENCION":rete5,
+        "valor retenido":rete5
+        }
+        filas.append(fila)
+
+    return filas
 
 
 if uploaded_files:
@@ -187,7 +272,9 @@ if uploaded_files:
     datos=[]
 
     for file in uploaded_files:
-        datos.append(procesar_pdf(file))
+        filas=procesar_pdf(file)
+        for f in filas:
+            datos.append(f)
 
     df=pd.DataFrame(datos,columns=columnas)
 
@@ -198,7 +285,6 @@ if uploaded_files:
     df["RETE 10%"]=df["RETE 10%"].fillna(0)
     df["RETE 100%"]=df["RETE 100%"].fillna(0)
     df["2% R.FTE"]=df["2% R.FTE"].fillna(0)
-    df["RETE 5%"]=df["RETE 5%"].fillna(0)
 
     st.dataframe(df)
 
@@ -265,7 +351,7 @@ if uploaded_files:
 
             worksheet.write(fila_excel,0,"TOTAL",total_format)
 
-            for col in range(8,21):
+            for col in range(8,20):
 
                 letra=chr(65+col)
 
@@ -275,7 +361,7 @@ if uploaded_files:
 
             fila_excel+=3
 
-        worksheet.set_column(0,21,18)
+        worksheet.set_column(0,20,18)
 
     output.seek(0)
 
